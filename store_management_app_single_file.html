@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Store Manager — Single File App</title>
+  <style>
+    :root{--bg:#0f1724;--card:#0b1220;--accent:#06b6d4;--muted:#9aa7b2;--glass: rgba(255,255,255,0.03)}
+    *{box-sizing:border-box;font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,'Helvetica Neue',Arial}
+    html,body{height:100%;margin:0;background:linear-gradient(180deg,#071021 0%, #071a2a 60%);color:#e6eef3}
+
+    /* App frame */
+    .app{max-width:1100px;margin:28px auto;border-radius:14px;overflow:hidden;box-shadow:0 10px 30px rgba(2,6,23,0.7);display:grid;grid-template-columns:260px 1fr}
+    .sidebar{background:linear-gradient(180deg,var(--card),#071429);padding:18px}
+    .brand{display:flex;gap:12px;align-items:center;margin-bottom:18px}
+    .logo{width:44px;height:44px;border-radius:10px;background:linear-gradient(135deg,var(--accent),#7c3aed);display:flex;align-items:center;justify-content:center;font-weight:700}
+    h1{font-size:14px;margin:0}
+    .subtitle{font-size:12px;color:var(--muted);margin-top:4px}
+
+    .tabs{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+    .tab{padding:10px;border-radius:8px;color:var(--muted);cursor:pointer;display:flex;gap:10px;align-items:center}
+    .tab.active{background:var(--glass);color:#e6eef3}
+
+    .content{padding:22px}
+    .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+    .search{background:rgba(255,255,255,0.03);padding:8px 12px;border-radius:10px;display:flex;gap:8px;align-items:center;color:var(--muted)}
+    .card-row{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:16px}
+    .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));padding:12px;border-radius:12px}
+    .card h3{margin:0;font-size:13px;color:var(--muted)}
+    .card p{margin:6px 0 0;font-size:20px;font-weight:700}
+
+    /* Inventory list */
+    .table{background:linear-gradient(180deg,#051024, #071229);padding:12px;border-radius:12px}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:10px;text-align:left;border-bottom:1px dashed rgba(255,255,255,0.03)}
+    th{font-size:12px;color:var(--muted)}
+    td small{display:block;color:var(--muted);font-size:12px}
+
+    /* Controls */
+    .form-row{display:flex;gap:10px;margin-top:12px}
+    input,select,button{padding:8px 10px;border-radius:8px;border:0;background:rgba(255,255,255,0.03);color:inherit}
+    .btn{background:linear-gradient(90deg,var(--accent),#7c3aed);color:#06121a;border-radius:10px;font-weight:700}
+    .danger{background:linear-gradient(90deg,#ef4444,#f97316);color:#fff}
+
+    /* Analytics */
+    .charts{display:grid;grid-template-columns:1fr 460px;gap:14px}
+    .chart-card{padding:12px;border-radius:12px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01))}
+    svg{width:100%;height:260px}
+
+    /* small screens */
+    @media (max-width:980px){.app{grid-template-columns:1fr}.card-row{grid-template-columns:repeat(2,1fr)}.charts{grid-template-columns:1fr}.sidebar{display:none}}
+  </style>
+</head>
+<body>
+  <div class="app" role="application">
+    <aside class="sidebar" aria-label="Navigation">
+      <div class="brand">
+        <div class="logo">SM</div>
+        <div>
+          <h1>Store Manager</h1>
+          <div class="subtitle">Single-file HTML app</div>
+        </div>
+      </div>
+
+      <nav class="tabs" role="tablist">
+        <div class="tab active" data-tab="inventory" role="tab">📦 Inventory</div>
+        <div class="tab" data-tab="manage" role="tab">➕ Add / Remove</div>
+        <div class="tab" data-tab="analytics" role="tab">📊 Analytics</div>
+        <div class="tab" data-tab="summary" role="tab">📝 Summary</div>
+      </nav>
+
+      <div style="margin-top:18px;font-size:12px;color:var(--muted)">Tips: Add items in "Add / Remove". Charts update live.</div>
+    </aside>
+
+    <main class="content">
+      <div class="topbar">
+        <div style="display:flex;gap:12px;align-items:center">
+          <div style="font-weight:700;font-size:18px">Inventory</div>
+          <div class="search">🔍 <input id="quickSearch" placeholder="Search item or category" style="background:transparent;border:0;outline:0;color:inherit" /></div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <div style="text-align:right">
+            <div style="font-size:12px;color:var(--muted)">Total value</div>
+            <div id="totalValue" style="font-weight:800">₹0</div>
+          </div>
+          <button class="btn" id="exportBtn">Export JSON</button>
+        </div>
+      </div>
+
+      <section id="inventorySection">
+        <div class="card-row">
+          <div class="card">
+            <h3>Items</h3>
+            <p id="itemCount">0</p>
+          </div>
+          <div class="card">
+            <h3>Categories</h3>
+            <p id="categoryCount">0</p>
+          </div>
+          <div class="card">
+            <h3>Low stock (&lt;5)</h3>
+            <p id="lowStock">0</p>
+          </div>
+        </div>
+
+        <div class="table">
+          <table>
+            <thead><tr><th>Item</th><th>Category</th><th>Price</th><th>Stock</th><th>Actions</th></tr></thead>
+            <tbody id="inventoryTable"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="manageSection" style="display:none;margin-top:14px">
+        <div class="card" style="display:flex;flex-direction:column;gap:10px">
+          <div style="font-weight:700">Add new item</div>
+          <div class="form-row">
+            <input id="name" placeholder="Name (e.g. T-Shirt)" />
+            <input id="category" placeholder="Category (e.g. Clothing)" />
+            <input id="price" placeholder="Price (number)" type="number" />
+            <input id="stock" placeholder="Stock (integer)" type="number" />
+            <button class="btn" id="addBtn">Add</button>
+          </div>
+
+          <div style="height:1px;background:rgba(255,255,255,0.02);margin:6px 0"></div>
+
+          <div style="font-weight:700">Remove by name</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input id="removeName" placeholder="Exact item name" />
+            <button class="danger" id="removeBtn">Remove</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="analyticsSection" style="display:none;margin-top:14px">
+        <div class="charts">
+          <div class="chart-card">
+            <div style="font-weight:700;margin-bottom:8px">Stock by Category (Pie)</div>
+            <svg id="pieChart" viewBox="0 0 200 200" role="img" aria-label="Pie chart showing stock distribution by category"></svg>
+          </div>
+
+          <div class="chart-card">
+            <div style="font-weight:700;margin-bottom:8px">Top Items by Stock (Bar)</div>
+            <svg id="barChart" viewBox="0 0 460 260" role="img" aria-label="Bar chart showing top items by stock"></svg>
+          </div>
+        </div>
+
+        <div style="margin-top:12px;display:flex;gap:12px">
+          <div class="card" style="flex:1">
+            <h3>Category breakdown</h3>
+            <div id="categoryList" style="margin-top:8px;color:var(--muted)"></div>
+          </div>
+          <div class="card" style="width:260px">
+            <h3>Sales projection</h3>
+            <p id="projection" style="margin-top:8px">—</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="summarySection" style="display:none;margin-top:14px">
+        <div class="card">
+          <h3>Summary</h3>
+          <p id="summaryText" style="color:var(--muted);margin-top:8px"></p>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script>
+    // Sample data
+    let inventory = [
+      {name:'Plain T-Shirt', category:'Clothing', price:299, stock:24},
+      {name:'Running Shoes', category:'Footwear', price:2499, stock:12},
+      {name:'Jeans', category:'Clothing', price:999, stock:8},
+      {name:'Coffee Mug', category:'Home', price:199, stock:40},
+      {name:'Headphones', category:'Electronics', price:1599, stock:6},
+      {name:'Socks (pack)', category:'Clothing', price:199, stock:50},
+      {name:'Notebook', category:'Stationery', price:79, stock:80},
+      {name:'Water Bottle', category:'Home', price:399, stock:15},
+      {name:'Backpack', category:'Accessories', price:1299, stock:4},
+      {name:'Smartphone', category:'Electronics', price:19999, stock:2}
+    ];
+
+    // DOM refs
+    const inventoryTable = document.getElementById('inventoryTable');
+    const itemCount = document.getElementById('itemCount');
+    const categoryCount = document.getElementById('categoryCount');
+    const lowStock = document.getElementById('lowStock');
+    const totalValue = document.getElementById('totalValue');
+    const categoryList = document.getElementById('categoryList');
+    const projection = document.getElementById('projection');
+    const summaryText = document.getElementById('summaryText');
+    const pieChart = document.getElementById('pieChart');
+    const barChart = document.getElementById('barChart');
+
+    // Render functions
+    function renderInventory(filter=''){
+      const f = filter.trim().toLowerCase();
+      inventoryTable.innerHTML = '';
+      inventory.forEach((it, idx)=>{
+        if(f && !(it.name.toLowerCase().includes(f) || it.category.toLowerCase().includes(f))) return;
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td><strong>${escapeHtml(it.name)}</strong><small>SKU: #${idx+1001}</small></td>
+                        <td>${escapeHtml(it.category)}</td>
+                        <td>₹${it.price.toFixed(2)}</td>
+                        <td>${it.stock}</td>
+                        <td><button data-idx="${idx}" class="btn small">Sell 1</button> <button data-del="${idx}" class="danger small">Delete</button></td>`;
+        inventoryTable.appendChild(tr);
+      });
+
+      // add event handlers
+      document.querySelectorAll('button[data-idx]').forEach(b=>b.addEventListener('click',()=>{
+        const i = parseInt(b.getAttribute('data-idx'));
+        if(inventory[i].stock>0) inventory[i].stock--;
+        updateAll();
+      }));
+      document.querySelectorAll('button[data-del]').forEach(b=>b.addEventListener('click',()=>{
+        const i = parseInt(b.getAttribute('data-del'));
+        if(confirm('Remove "'+inventory[i].name+'"?')){ inventory.splice(i,1); updateAll(); }
+      }));
+
+      itemCount.textContent = inventory.length;
+      const cats = [...new Set(inventory.map(i=>i.category))];
+      categoryCount.textContent = cats.length;
+      lowStock.textContent = inventory.filter(i=>i.stock<5).length;
+      totalValue.textContent = '₹' + inventory.reduce((s,i)=>s + i.price * i.stock,0).toLocaleString();
+    }
+
+    function updateCategoryList(){
+      const map = {}; inventory.forEach(i=> map[i.category] = (map[i.category]||0) + i.stock);
+      categoryList.innerHTML = Object.entries(map).map(([k,v])=>`<div><strong>${k}</strong> — ${v} units</div>`).join('');
+    }
+
+    function updateProjection(){
+      // simple heuristic: monthly sales projection = 0.2 * stock * price (assume 20% turnover)
+      const proj = inventory.reduce((s,i)=> s + 0.2 * i.stock * i.price,0);
+      projection.textContent = 'Projected monthly revenue (est.): ₹' + Math.round(proj).toLocaleString();
+    }
+
+    function updateSummary(){
+      const totalItems = inventory.length;
+      const totalStock = inventory.reduce((s,i)=>s+i.stock,0);
+      const value = inventory.reduce((s,i)=>s + i.stock*i.price,0);
+      const low = inventory.filter(i=>i.stock<5).map(i=>i.name);
+      summaryText.innerHTML = `You have <strong>${totalItems}</strong> distinct items with <strong>${totalStock}</strong> units in stock. Current inventory value is <strong>₹${value.toLocaleString()}</strong>. ${low.length? 'Low stock items: '+low.join(', ')+'.' : 'No items are critically low.'}`;
+    }
+
+    // Charts (SVG)
+    function drawPie(){
+      const map = {}; inventory.forEach(i=> map[i.category] = (map[i.category]||0) + i.stock);
+      const entries = Object.entries(map);
+      const total = entries.reduce((s,[k,v])=> s+v,0);
+      pieChart.innerHTML = '';
+      if(total===0) return;
+      let angle = 0; const cx=100, cy=100, r=90;
+      entries.forEach(([k,v],i)=>{
+        const slice = v/total * 2*Math.PI;
+        const x1 = cx + r*Math.cos(angle);
+        const y1 = cy + r*Math.sin(angle);
+        angle += slice;
+        const x2 = cx + r*Math.cos(angle);
+        const y2 = cy + r*Math.sin(angle);
+        const large = slice > Math.PI ? 1:0;
+        const path = document.createElementNS('http://www.w3.org/2000/svg','path');
+        const color = pickColor(i);
+        path.setAttribute('d',`M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2} Z`);
+        path.setAttribute('fill',color);
+        path.setAttribute('stroke','#071429');
+        path.setAttribute('stroke-width','0.5');
+        pieChart.appendChild(path);
+      });
+
+      // legend
+      let ly = 8;
+      entries.forEach(([k,v],i)=>{
+        const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+        const rect = document.createElementNS('http://www.w3.org/2000/svg','rect');
+        rect.setAttribute('x',10); rect.setAttribute('y',ly); rect.setAttribute('width',12); rect.setAttribute('height',12);
+        rect.setAttribute('fill',pickColor(i));
+        const text = document.createElementNS('http://www.w3.org/2000/svg','text');
+        text.setAttribute('x',28); text.setAttribute('y',ly+10); text.setAttribute('font-size',11); text.setAttribute('fill','#cfe7f2');
+        text.textContent = `${k} — ${v}`;
+        g.appendChild(rect); g.appendChild(text);
+        pieChart.appendChild(g);
+        ly += 18;
+      });
+    }
+
+    function drawBar(){
+      const sorted = [...inventory].sort((a,b)=>b.stock-a.stock).slice(0,8);
+      const w = 420, h=200, padding=30;
+      barChart.innerHTML = '';
+      if(sorted.length===0) return;
+      const max = Math.max(...sorted.map(s=>s.stock));
+      const bw = (w - padding*2) / sorted.length;
+      sorted.forEach((it,i)=>{
+        const gh = (it.stock / max) * (h - padding*2);
+        const x = padding + i*bw + 8;
+        const y = h - padding - gh;
+        const rect = document.createElementNS('http://www.w3.org/2000/svg','rect');
+        rect.setAttribute('x',x); rect.setAttribute('y',y); rect.setAttribute('width',bw-16); rect.setAttribute('height',gh);
+        rect.setAttribute('fill',pickColor(i)); rect.setAttribute('rx',6);
+        barChart.appendChild(rect);
+        const label = document.createElementNS('http://www.w3.org/2000/svg','text');
+        label.setAttribute('x', x + (bw-16)/2); label.setAttribute('y', h - padding + 14); label.setAttribute('text-anchor','middle'); label.setAttribute('font-size',11); label.setAttribute('fill','#cfe7f2');
+        label.textContent = it.name.length>12? it.name.slice(0,12)+'...': it.name;
+        barChart.appendChild(label);
+      });
+
+      // y axis numbers
+      for(let i=0;i<=5;i++){
+        const yv = Math.round(max * i/5);
+        const yy = h - padding - (h - padding*2) * (i/5);
+        const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+        t.setAttribute('x',6); t.setAttribute('y',yy+4); t.setAttribute('font-size',10); t.setAttribute('fill', '#9aa7b2');
+        t.textContent = yv;
+        barChart.appendChild(t);
+      }
+    }
+
+    function pickColor(i){
+      const colors = ['#06b6d4','#7c3aed','#06d6a0','#f59e0b','#ef4444','#3b82f6','#f97316','#8b5cf6','#e879f9'];
+      return colors[i % colors.length];
+    }
+
+    // utilities
+    function escapeHtml(s){ return String(s).replace(/[&<>"]+/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"})[c]); }
+
+    function updateAll(filter){ renderInventory(filter); updateCategoryList(); updateProjection(); updateSummary(); drawPie(); drawBar(); }
+
+    // initial render
+    updateAll();
+
+    // Tab switching
+    document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
+      document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+      t.classList.add('active');
+      const tab = t.getAttribute('data-tab');
+      document.getElementById('inventorySection').style.display = tab==='inventory'? 'block':'none';
+      document.getElementById('manageSection').style.display = tab==='manage'? 'block':'none';
+      document.getElementById('analyticsSection').style.display = tab==='analytics'? 'block':'none';
+      document.getElementById('summarySection').style.display = tab==='summary'? 'block':'none';
+    }));
+
+    // add/remove handlers
+    document.getElementById('addBtn').addEventListener('click', ()=>{
+      const name = document.getElementById('name').value.trim();
+      const category = document.getElementById('category').value.trim();
+      const price = parseFloat(document.getElementById('price').value) || 0;
+      const stock = parseInt(document.getElementById('stock').value) || 0;
+      if(!name || !category){ alert('Provide name and category'); return; }
+      inventory.push({name,category,price,stock});
+      document.getElementById('name').value=''; document.getElementById('category').value=''; document.getElementById('price').value=''; document.getElementById('stock').value='';
+      updateAll();
+    });
+
+    document.getElementById('removeBtn').addEventListener('click', ()=>{
+      const name = document.getElementById('removeName').value.trim();
+      const idx = inventory.findIndex(i=>i.name===name);
+      if(idx===-1){ alert('Item not found by exact name'); return; }
+      inventory.splice(idx,1); document.getElementById('removeName').value=''; updateAll();
+    });
+
+    // quick search
+    document.getElementById('quickSearch').addEventListener('input',(e)=>{
+      updateAll(e.target.value);
+    });
+
+    // export
+    document.getElementById('exportBtn').addEventListener('click', ()=>{
+      const blob = new Blob([JSON.stringify(inventory,null,2)],{type:'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = 'inventory.json'; a.click(); URL.revokeObjectURL(url);
+    });
+
+    // keyboard: Enter on form inputs toggles add
+    ['name','category','price','stock'].forEach(id=>{
+      document.getElementById(id).addEventListener('keydown',(e)=>{ if(e.key==='Enter') document.getElementById('addBtn').click(); });
+    });
+
+  </script>
+</body>
+</html>
